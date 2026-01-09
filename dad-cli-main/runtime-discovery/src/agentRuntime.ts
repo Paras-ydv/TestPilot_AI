@@ -139,8 +139,14 @@ export async function executeAction(
               const placeholder = await el.evaluate((e: any) => e.placeholder || e.name || "");
               identifier = `${tagName}_${placeholder.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
             } else {
-              const text = await el.innerText();
-              identifier = `${tagName}_${text?.toLowerCase().replace(/[^a-z0-9]+/g, "_") || ""}`;
+              const text = await el.evaluate(e => e.textContent?.trim() || "");
+              const ariaLabel = await el.getAttribute('aria-label');
+              const title = await el.getAttribute('title');
+              const finalText = text || ariaLabel || title || "";
+              // Normalize tag name to match discovery phase: 'a' -> 'link', 'button' -> 'button'
+              const normalizedTag = tagName === 'a' ? 'link' : tagName;
+              identifier = `${normalizedTag}_${finalText.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+              console.log(`[DEBUG] Element: tag=${tagName}, text="${text}", aria="${ariaLabel}", title="${title}", identifier="${identifier}"`);
             }
 
             if (action.action_id === identifier) {
