@@ -18,11 +18,54 @@ cd ../vscode-extension && npm install
 ```
 
 ### 2. Start Qdrant Vector Database
+
+**Windows (PowerShell):**
+```powershell
+# Using Docker (recommended)
+docker run -p 6333:6333 -v ${PWD}/qdrant_data:/qdrant/storage qdrant/qdrant
+
+# Or download binary
+Invoke-WebRequest -Uri "https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-pc-windows-msvc.zip" -OutFile "qdrant.zip"
+Expand-Archive -Path "qdrant.zip" -DestinationPath "."
+.\qdrant.exe
+```
+
+**Windows (CMD):**
+```cmd
+# Using Docker (recommended)
+docker run -p 6333:6333 -v %cd%/qdrant_data:/qdrant/storage qdrant/qdrant
+
+# Or download binary
+curl -L https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-pc-windows-msvc.zip -o qdrant.zip
+tar -xf qdrant.zip
+qdrant.exe
+```
+
+**Linux/macOS:**
 ```bash
-# Start Qdrant with Docker
+# Using Docker (recommended)
 docker run -p 6333:6333 -v $(pwd)/qdrant_data:/qdrant/storage qdrant/qdrant
 
-# Create knowledge base collection
+# Or download binary
+wget https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf qdrant-x86_64-unknown-linux-gnu.tar.gz
+./qdrant
+```
+
+**Initialize Collection:**
+
+*PowerShell:*
+```powershell
+node createCollection.ts
+```
+
+*CMD:*
+```cmd
+node createCollection.ts
+```
+
+*Linux/macOS:*
+```bash
 node createCollection.ts
 ```
 
