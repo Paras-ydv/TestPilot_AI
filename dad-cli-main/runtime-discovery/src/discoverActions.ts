@@ -7,6 +7,7 @@ export type DiscoveredAction = {
   viewportSafe: boolean;
   inputType?: string;
   options?: string[];
+  isModal?: boolean;
 };
 
 export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
@@ -18,18 +19,27 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
       const buttons = document.querySelectorAll('button');
       for (let i = 0; i < buttons.length; i++) {
         const btn = buttons[i];
-        const text = btn.textContent?.trim();
-        if (text && text.length > 1) {
+        let text = btn.textContent?.trim();
+        const ariaLabel = btn.getAttribute('aria-label');
+        const title = btn.getAttribute('title');
+
+        // Fallback to aria-label or title if text is empty/short
+        if ((!text || text.length <= 1) && (ariaLabel || title)) {
+          text = (ariaLabel || title || "") as string;
+        }
+
+        if (text && text.length > 0) {
           const rect = btn.getBoundingClientRect();
-          const visible = rect.top >= 0 && rect.left >= 0 && 
-                         rect.bottom <= window.innerHeight && 
-                         rect.right <= window.innerWidth;
-          
+          const visible = rect.top >= 0 && rect.left >= 0 &&
+            rect.bottom <= window.innerHeight &&
+            rect.right <= window.innerWidth;
+
           results.push({
             id: 'button_' + text.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
             type: 'button',
             label: text,
-            viewportSafe: visible
+            viewportSafe: visible,
+            isModal: btn.closest('[role="dialog"], .modal, .popup, .overlay') !== null
           });
         }
       }
@@ -38,18 +48,26 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
       const links = document.querySelectorAll('a[href]');
       for (let i = 0; i < links.length; i++) {
         const link = links[i];
-        const text = link.textContent?.trim();
-        if (text && text.length > 1) {
+        let text = link.textContent?.trim();
+        const ariaLabel = link.getAttribute('aria-label');
+        const title = link.getAttribute('title');
+
+        if ((!text || text.length <= 1) && (ariaLabel || title)) {
+          text = (ariaLabel || title || "") as string;
+        }
+
+        if (text && text.length > 0) {
           const rect = link.getBoundingClientRect();
-          const visible = rect.top >= 0 && rect.left >= 0 && 
-                         rect.bottom <= window.innerHeight && 
-                         rect.right <= window.innerWidth;
-          
+          const visible = rect.top >= 0 && rect.left >= 0 &&
+            rect.bottom <= window.innerHeight &&
+            rect.right <= window.innerWidth;
+
           results.push({
             id: 'link_' + text.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
             type: 'link',
             label: text,
-            viewportSafe: visible
+            viewportSafe: visible,
+            isModal: link.closest('[role="dialog"], .modal, .popup, .overlay') !== null
           });
         }
       }
@@ -57,14 +75,14 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
       // Find inputs
       const inputs = document.querySelectorAll('input, textarea');
       for (let i = 0; i < inputs.length; i++) {
-        const input = inputs[i];
+        const input = inputs[i] as HTMLInputElement | HTMLTextAreaElement;
         const type = input.type || 'text';
         const placeholder = input.placeholder || input.name || `input_${i}`;
         const rect = input.getBoundingClientRect();
-        const visible = rect.top >= 0 && rect.left >= 0 && 
-                       rect.bottom <= window.innerHeight && 
-                       rect.right <= window.innerWidth;
-        
+        const visible = rect.top >= 0 && rect.left >= 0 &&
+          rect.bottom <= window.innerHeight &&
+          rect.right <= window.innerWidth;
+
         if (type === 'checkbox' || type === 'radio') {
           results.push({
             id: `${type}_${placeholder.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
@@ -91,10 +109,10 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
         const name = select.name || `select_${i}`;
         const options = Array.from(select.options).map(opt => opt.text);
         const rect = select.getBoundingClientRect();
-        const visible = rect.top >= 0 && rect.left >= 0 && 
-                       rect.bottom <= window.innerHeight && 
-                       rect.right <= window.innerWidth;
-        
+        const visible = rect.top >= 0 && rect.left >= 0 &&
+          rect.bottom <= window.innerHeight &&
+          rect.right <= window.innerWidth;
+
         results.push({
           id: `select_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
           type: 'select',

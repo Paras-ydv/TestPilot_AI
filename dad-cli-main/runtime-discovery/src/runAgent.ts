@@ -3,6 +3,7 @@ import { discoverUI, executeAction } from "./agentRuntime.js";
 import { runPrompt3 } from "../../langraph/index.ts";
 import { AgentState, AgentStep, ActionContract } from "./types.js";
 import { storeKnowledge } from "../../knowledge/store.ts";
+import { searchKnowledge } from "../../knowledge/retrieve.ts";
 
 const args = process.argv.slice(2);
 const headfulIndex = args.indexOf('--headful');
@@ -91,6 +92,37 @@ async function persistRunKnowledge(state: AgentState) {
         console.error("❌ Failed to store knowledge for step:", step.step, error instanceof Error ? error.message : String(error));
       }
     }
+
+    // Store globally-explored actions for deduplication in future runs
+    const exploredActions = new Set<string>();
+    for (const step of state.steps) {
+      if (!step.observation.skipped) {
+        exploredActions.add(step.action.action_id);
+      }
+    }
+
+    console.log(`📚 Storing ${exploredActions.size} globally-explored actions to KB...`);
+    for (const action of exploredActions) {
+      try {
+        const actionSig = `action_explored:${action}`;
+        await storeKnowledge({
+          type: "flow",
+          content: `Explored action: ${action}`,
+          error_signature: actionSig, // Use for exact matching
+          solution: action,
+          confidence: 1.0, // High confidence for successfully explored
+          run_id: state.run_id,
+          metadata: {
+            endpoint: state.runtime.url,
+            env: "runtime",
+            timestamp: new Date().toISOString(),
+            tags: ["action_explored", "global_dedup"]
+          }
+        });
+      } catch (error) {
+        console.warn(`⚠️ Failed to store action ${action}:`, error instanceof Error ? error.message : String(error));
+      }
+    }
   } catch (error) {
     console.error("❌ Failed to persist run knowledge:", error instanceof Error ? error.message : String(error));
   }
@@ -120,37 +152,81 @@ async function main() {
       process.exit(1);
     }
 
-    let lastStateId: string | null = null;
-    let consecutiveFailures = 0;
+    // Track which actions have been tried at each state (for DFS exploration)
+    const stateActionMap = new Map<string, Set<string>>();
 
-    for (let step = 0; step < 10; step++) {
+    // Track consecutive backtracking to detect loops
+    let consecutiveBacks = 0;
+
+    // Increase limit for exploration
+    for (let step = 0; step < 100; step++) {
       try {
         console.log(`\n[Loop] Step ${step + 1}`);
         console.log("[DEBUG] Available actions:", state.ui_state?.available_actions);
 
-        // 🔒 Safety stop
-        if (consecutiveFailures >= 5) {
-          console.log("[Loop] Too many failed actions. Stopping.");
+        /* --------------------------------------
+           🧠 KNOWLEDGE CHECK (Stop if known)
+        ---------------------------------------*/
+        const currentUrl = state.runtime.url; // Note: We might want the actual current page URL if it changes
+        const actionCount = state.ui_state?.available_actions?.length || 0;
+
+        // Simple signature for "Being at this state"
+        // In a real app, this should include the route from the browser, not just targetUrl
+        const stateSignature = `state_visit:${state.ui_state?.route || 'unknown'}:${actionCount}`;
+
+        console.log("🧠 Checking KB for state:", stateSignature);
+
+        let knownStates: any[] = [];
+        try {
+          knownStates = await searchKnowledge(stateSignature, {
+            type: "observation",
+            topK: 1
+          });
+        } catch (error) {
+          console.warn("⚠️ Qdrant/KB seems offline. Skipping knowledge check.");
+        }
+
+        if (knownStates.length > 0 && knownStates[0].confidence && knownStates[0].confidence > 0.9) {
+          console.log(`🛑 TERMINATING: Reached a known knowledge node!`);
+          console.log(`   Matches: ${knownStates[0].content} (ID: ${knownStates[0].id})`);
           break;
         }
 
         // ---------------------------------
+        // DFS: Get current state and track tried actions
+        // ---------------------------------
+        const currentStateKey = state.ui_state?.route || 'unknown';
+        if (!stateActionMap.has(currentStateKey)) {
+          stateActionMap.set(currentStateKey, new Set());
+        }
+        const triedAtThisState = stateActionMap.get(currentStateKey)!;
+
+        // Get untried actions at current state
+        const untriedActions = state.ui_state?.available_actions
+          ?.filter(a => !triedAtThisState.has(a)) || [];
+
+        console.log(`[DFS] State: ${currentStateKey}, Untried: ${untriedActions.length}/${state.ui_state?.available_actions?.length || 0}`);
+
+        // ---------------------------------
         // FORCE modal dismissal first
         // ---------------------------------
-        const modalActions = state.ui_state?.available_actions?.filter(actionId => {
-          // Check if this is likely a modal dismiss button
+        const modalActions = untriedActions.filter(actionId => {
           const lowerAction = actionId.toLowerCase();
-          return lowerAction.includes('close') || 
-                 lowerAction.includes('cancel') || 
-                 lowerAction.includes('ok') || 
-                 lowerAction.includes('dismiss') ||
-                 lowerAction.includes('accept') ||
-                 lowerAction.includes('continue') ||
-                 lowerAction.includes('agree');
-        }) || [];
+          return lowerAction.includes('close') ||
+            lowerAction.includes('cancel') ||
+            lowerAction.includes('ok') ||
+            lowerAction.includes('dismiss') ||
+            lowerAction.includes('accept') ||
+            lowerAction.includes('continue') ||
+            lowerAction.includes('agree') ||
+            lowerAction.includes('enter') ||
+            lowerAction.includes('18') ||
+            lowerAction.includes('older') ||
+            lowerAction.includes('confirm') ||
+            lowerAction.includes('yes');
+        });
 
-        const tried = new Set(state.steps.map(s => s.action.action_id));
-        const untriedModalAction = modalActions.find(a => !tried.has(a));
+        const untriedModalAction = modalActions[0];
 
         // If there's an untried modal action, prioritize it
         if (untriedModalAction) {
@@ -178,28 +254,47 @@ async function main() {
         }
 
         // ---------------------------------
-        // FORCE fallback if Prompt-3 stops
+        // FORCE fallback if Prompt-3 stops OR auto-DFS
         // ---------------------------------
         if (state.control !== "CONTINUE" || !state.next_action) {
-          console.log("[Loop] Prompt-3 stopped. Forcing fallback.");
+          console.log("[Loop] Selecting next action via DFS...");
 
-          const tried = new Set(
-            state.steps.map(s => s.action.action_id)
-          );
+          // Check if all actions exhausted at current state
+          if (untriedActions.length === 0) {
+            console.log("[DFS] All actions explored at current state. BACKTRACKING...");
+            state.next_action = {
+              action_id: "BROWSER_BACK",
+              parameters: {}
+            };
+            state.control = "CONTINUE";
+          } else {
+            // Prioritize navigation links for exploration
+            const navLinks = untriedActions.filter(a => a.startsWith('link_'));
+            const otherActions = untriedActions.filter(a => !a.startsWith('link_'));
 
-          const fallback = state.ui_state?.available_actions
-            ?.find(a => !tried.has(a));
+            const fallback = navLinks.length > 0 ? navLinks[0] : otherActions[0];
 
-          if (!fallback) {
-            console.log("[Loop] No fallback actions left.");
+            console.log(`[DFS] Selected: ${fallback}`);
+            state.next_action = {
+              action_id: fallback,
+              parameters: {}
+            };
+            state.control = "CONTINUE";
+          }
+        }
+
+        // Mark action as tried for current state
+        triedAtThisState.add(state.next_action.action_id);
+
+        // Track backtracking to detect loops
+        if (state.next_action.action_id === "BROWSER_BACK") {
+          consecutiveBacks++;
+          if (consecutiveBacks > 3) {
+            console.log("🛑 Stuck in backtracking loop (>3 consecutive backs). Terminating exploration.");
             break;
           }
-
-          state.next_action = {
-            action_id: fallback,
-            parameters: {}
-          };
-          state.control = "CONTINUE";
+        } else {
+          consecutiveBacks = 0; // Reset on normal action
         }
 
         console.log("[Loop] Executing:", state.next_action.action_id);
@@ -225,9 +320,9 @@ async function main() {
         // Refresh UI and detect changes
         // ---------------------------------
         const oldActions = new Set(state.ui_state?.available_actions || []);
-        const oldModalCount = state.ui_state?.available_actions?.filter(a => 
-          a.toLowerCase().includes('close') || 
-          a.toLowerCase().includes('cancel') || 
+        const oldModalCount = state.ui_state?.available_actions?.filter(a =>
+          a.toLowerCase().includes('close') ||
+          a.toLowerCase().includes('cancel') ||
           a.toLowerCase().includes('ok')
         ).length || 0;
 
@@ -239,9 +334,9 @@ async function main() {
         }
 
         const newActions = new Set(state.ui_state?.available_actions || []);
-        const newModalCount = state.ui_state?.available_actions?.filter(a => 
-          a.toLowerCase().includes('close') || 
-          a.toLowerCase().includes('cancel') || 
+        const newModalCount = state.ui_state?.available_actions?.filter(a =>
+          a.toLowerCase().includes('close') ||
+          a.toLowerCase().includes('cancel') ||
           a.toLowerCase().includes('ok')
         ).length || 0;
 
@@ -258,40 +353,44 @@ async function main() {
         }
         if (modalDismissed) {
           console.log(`✅ Modal dismissed - UI unlocked`);
-          consecutiveFailures = 0; // Reset failures on modal dismissal
         }
 
-        const newStateId = state.ui_state?.state_id ?? null;
 
-        // Better progress detection
-        const significantChange = actionsAdded.length > 0 || actionsRemoved.length > 0 || modalDismissed;
-        const noProgress = lastStateId !== null && newStateId === lastStateId && !significantChange;
-
-        lastStateId = newStateId;
-
-        const failed = observation.skipped || noProgress;
-
-        if (failed && !modalDismissed) consecutiveFailures++;
-        else consecutiveFailures = 0;
 
         const agentStep: AgentStep = {
           step,
           action: state.next_action,
-          observation: {
-            ...observation,
-            skipped: failed
-          },
+          observation: observation,
           anomalies: state.anomalies ?? []
         };
+
+        // ---------------------------------
+        // Store State Visitation (Mapping the graph)
+        // ---------------------------------
+        if (!agentStep.observation.skipped) {
+          try {
+            const stateSig = `state_visit:${state.ui_state?.route || 'unknown'}:${state.ui_state?.available_actions?.length || 0}`;
+            await storeKnowledge({
+              type: "observation",
+              content: `Visited state: ${state.ui_state?.title}`,
+              error_signature: stateSig, // Use error_signature for the unique lookup key
+              run_id: state.run_id,
+              confidence: 1.0,
+              metadata: {
+                timestamp: new Date().toISOString(),
+                endpoint: targetUrl,
+                tags: ["state_map"]
+              }
+            });
+          } catch (error) {
+            console.warn("⚠️ Failed to store state in KB (Qdrant offline?):", error instanceof Error ? error.message : String(error));
+          }
+        }
 
         state.steps.push(agentStep);
       } catch (error) {
         console.error(`❌ Step ${step + 1} failed:`, error instanceof Error ? error.message : String(error));
-        consecutiveFailures++;
-        if (consecutiveFailures >= 5) {
-          console.log("[Loop] Too many step failures. Stopping.");
-          break;
-        }
+        // Continue exploration despite errors
       }
     }
 

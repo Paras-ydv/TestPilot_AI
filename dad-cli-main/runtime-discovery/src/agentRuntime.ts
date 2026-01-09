@@ -107,21 +107,36 @@ export async function executeAction(
           await page.waitForTimeout(1000);
         }
 
+        // Special Action: Backtracking
+        if (action.action_id === "BROWSER_BACK") {
+          console.log("🔙 Executing Browser Back...");
+          try {
+            await page.goBack({ waitUntil: 'load', timeout: 5000 });
+            await waitForPageStability(page);
+            console.log("✅ Back navigation successful");
+            break;
+          } catch (err) {
+            console.warn("⚠️ Back navigation failed:", err);
+            skipped = true;
+            break;
+          }
+        }
+
         console.log(`🎯 Looking for element matching: ${action.action_id}`);
-        
+
         // Try to find element using multiple strategies
         let target = null;
-        
+
         // Strategy 1: Direct selector match
         const elements = await page.$$("button, a, input, textarea, select");
-        
+
         for (const el of elements) {
           try {
             const tagName = await el.evaluate(e => e.tagName.toLowerCase());
             let identifier = "";
-            
+
             if (tagName === "input" || tagName === "textarea" || tagName === "select") {
-              const placeholder = await el.evaluate(e => e.placeholder || e.name || "");
+              const placeholder = await el.evaluate((e: any) => e.placeholder || e.name || "");
               identifier = `${tagName}_${placeholder.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
             } else {
               const text = await el.innerText();
@@ -134,11 +149,11 @@ export async function executeAction(
                 const rect = e.getBoundingClientRect();
                 const style = window.getComputedStyle(e);
                 return rect.width > 0 && rect.height > 0 &&
-                       style.visibility !== 'hidden' &&
-                       style.display !== 'none' &&
-                       style.opacity !== '0';
+                  style.visibility !== 'hidden' &&
+                  style.display !== 'none' &&
+                  style.opacity !== '0';
               });
-              
+
               if (isInteractable) {
                 console.log(`✅ Found interactable match: ${identifier}`);
                 target = el;
@@ -179,54 +194,60 @@ export async function executeAction(
 
         try {
           console.log(`🖱️ Clicking element: ${action.action_id}`);
-          
+
           // For Playwright locators, use different methods
           if (target.click) {
             await target.click({ timeout: 5000, force: true });
           } else {
             // For ElementHandle objects
             await target.scrollIntoViewIfNeeded();
-            
-            const tagName = await target.evaluate(e => e.tagName.toLowerCase());
-            const inputType = await target.evaluate(e => e.type || "");
-            
-            if (tagName === "input" || tagName === "textarea") {
-              if (inputType === "checkbox" || inputType === "radio") {
-                await target.click({ timeout: 5000, force: true });
+
+            // Cast target to ElementHandle to resolve the call signature ambiguity
+            const elementHandle = target as unknown as import('playwright').ElementHandle<HTMLElement>;
+
+            // Explicitly verify elementHandle before operations
+            if (elementHandle) {
+              const tagName = await elementHandle.evaluate((e) => e.tagName.toLowerCase());
+              const inputType = await elementHandle.evaluate((e: any) => e.type || "");
+
+              if (tagName === "input" || tagName === "textarea") {
+                if (inputType === "checkbox" || inputType === "radio") {
+                  await elementHandle.click({ timeout: 5000, force: true });
+                } else {
+                  await elementHandle.fill("test input", { timeout: 5000 });
+                }
+              } else if (tagName === "select") {
+                const options = await elementHandle.evaluate((e: any) => Array.from(e.options).map((opt: any) => opt.value));
+                if (options.length > 0) {
+                  await elementHandle.selectOption(options[0], { timeout: 5000 });
+                }
               } else {
-                await target.fill("test input", { timeout: 5000 });
+                await elementHandle.click({ timeout: 5000, force: true });
               }
-            } else if (tagName === "select") {
-              const options = await target.evaluate(e => Array.from(e.options).map(opt => opt.value));
-              if (options.length > 0) {
-                await target.selectOption(options[0], { timeout: 5000 });
-              }
-            } else {
-              await target.click({ timeout: 5000, force: true });
             }
           }
-          
+
           console.log(`✅ Successfully interacted with: ${action.action_id}`);
           break; // Success - exit retry loop
-          
+
         } catch (err) {
           const errorMsg = String(err);
           console.log(`❌ Failed to interact with: ${action.action_id} - ${errorMsg}`);
-          
+
           // 🚨 CAPTURE MODAL BLOCKING ERRORS
           if (errorMsg.includes('subtree intercepts pointer events') ||
-              errorMsg.includes('TimeoutError') ||
-              errorMsg.includes('modal') ||
-              errorMsg.includes('Element is not attached to the DOM')) {
+            errorMsg.includes('TimeoutError') ||
+            errorMsg.includes('modal') ||
+            errorMsg.includes('Element is not attached to the DOM')) {
             consoleErrors.push(`MODAL_BLOCKING: ${errorMsg}`);
-            
+
             if (retryCount < maxRetries) {
               console.log(`🔄 Modal blocking detected - retrying...`);
               retryCount++;
               continue;
             }
           }
-          
+
           skipped = true;
           break;
         }
