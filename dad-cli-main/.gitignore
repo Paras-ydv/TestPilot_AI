@@ -25,6 +25,12 @@ screenshots/
 reports/
 */reports/
 qdrant_data/
+quant-data/
+*/quant-data/
+data/
+*/data/
+training-data/
+*/training-data/
 
 # IDE files
 .vscode/
