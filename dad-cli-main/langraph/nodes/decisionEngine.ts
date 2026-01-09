@@ -14,7 +14,7 @@ export function decisionEngine(state: AgentState): AgentState {
     let decision: DecisionOutput;
 
     /* -----------------------------------------
-       1️⃣ SMART MEMORY RESOLUTION
+       1️⃣ ENHANCED MEMORY RESOLUTION
     ------------------------------------------*/
 
     if (
@@ -22,34 +22,44 @@ export function decisionEngine(state: AgentState): AgentState {
       memoryContext.memories?.length
     ) {
       try {
-        // 🔥 Sort by confidence (highest first)
-        const sorted = [...memoryContext.memories].sort(
-          (a, b) =>
-            (b.confidence ?? 0) -
-            (a.confidence ?? 0)
-        );
+        // Filter by type and confidence
+        const fixes = memoryContext.memories
+          .filter(m => m.type === "fix" && (m.confidence ?? 0) > 0.6)
+          .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+        
+        const patterns = memoryContext.memories
+          .filter(m => m.type === "pattern" && (m.confidence ?? 0) > 0.5)
+          .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
 
-        const best = sorted[0];
-
-        // Safety threshold
-        if ((best.confidence ?? 0) > 0.6 && best.solution) {
-
-          console.log(
-            "🧠 Using best memory:",
-            best.solution,
-            "confidence:",
-            best.confidence
-          );
-
+        // Prioritize proven fixes
+        if (fixes.length > 0) {
+          const best = fixes[0];
+          console.log(`🎯 Applying proven fix: ${best.solution} (${(best.confidence * 100).toFixed(0)}% confidence)`);
+          
           decision = {
             next_action: {
               action_id: best.solution,
-              parameters: {}
+              parameters: best.metadata?.parameters || {}
             },
             control: "CONTINUE",
             confidence: best.confidence
           };
-        } else {
+        }
+        // Use patterns for guidance
+        else if (patterns.length > 0) {
+          const pattern = patterns[0];
+          console.log(`🔍 Following pattern: ${pattern.content}`);
+          
+          decision = {
+            next_action: {
+              action_id: pattern.solution || "investigate",
+              parameters: {}
+            },
+            control: "CONTINUE",
+            confidence: pattern.confidence
+          };
+        }
+        else {
           decision = { next_action: null, control: "TERMINATE" };
         }
       } catch (error) {

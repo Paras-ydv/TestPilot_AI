@@ -1,46 +1,31 @@
 import { searchKnowledge } from "../../knowledge/retrieve.ts";
-import type { KnowledgeItem } from "../../knowledge/schema";
+import type { KnowledgeItem } from "../../knowledge/schema.ts";
 
 export async function memoryNode(state: any) {
+  const query = state.diagnosis?.error_signature || state.last_error || state.anomalies?.map((a: any) => a.message || a.type).join(" ") || "agent runtime behavior";
 
-  // Build smart query
-  const query =
-    state.diagnosis?.error_signature ||
-    state.last_error ||
-    state.anomalies?.map((a: any) => a.message || a.type).join(" ") ||
-    state.steps?.at(-1)?.action?.action_id ||
-    "agent runtime behavior";
+  // Multi-type knowledge search
+  const [errors, fixes, patterns] = await Promise.all([
+    searchKnowledge(query, { type: "error", topK: 2 }),
+    searchKnowledge(query, { type: "fix", topK: 3 }),
+    searchKnowledge(query, { type: "pattern", topK: 2 })
+  ]);
 
+  const allMemories = [...errors, ...fixes, ...patterns]
+    .filter(m => (m.confidence ?? 0) > 0.3)
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
 
-  // Search KB
-  const memories: KnowledgeItem[] = await searchKnowledge(query, {
-    type: "error",
-    topK: 3
-  });
+  const avgConfidence = allMemories.length === 0 ? 0 : allMemories.reduce((acc, m) => acc + (m.confidence ?? 0), 0) / allMemories.length;
 
-  // Compute confidence
-  const avgConfidence =
-    memories.length === 0
-      ? 0
-      : memories.reduce(
-          (acc, m) => acc + (m.confidence ?? 0),
-          0
-        ) / memories.length;
-
-  console.log(
-    `🧠 Memory consulted | hits=${memories.length} | confidence=${avgConfidence.toFixed(
-      2
-    )}`
-  );
+  console.log(`🧠 Memory: ${allMemories.length} items | confidence=${avgConfidence.toFixed(2)}`);
 
   return {
     ...state,
-
-    // attach memory context
     knowledge_context: {
       query,
-      memories,
-      confidence: avgConfidence
+      memories: allMemories,
+      confidence: avgConfidence,
+      has_solutions: fixes.length > 0
     }
   };
 }
