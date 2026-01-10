@@ -1,8 +1,8 @@
-import { launchBrowser } from "./browser";
-import { discoverActions } from "./discoverActions";
-import { executeAction, discoverUI } from "./agentRuntime";
-import { waitForPageStability } from "./waitForStability";
-import { ActionContract } from "./types";
+import { launchBrowser } from "./browser.js";
+import { discoverActions } from "./discoverActions.js";
+import { executeAction, discoverUI } from "./agentRuntime.js";
+import { waitForPageStability } from "./waitForStability.js";
+import { ActionContract } from "./types.js";
 
 const URL = process.argv[2];
 

@@ -3,21 +3,27 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx --watch src/server.ts",
+    "setup-db": "tsx src/scripts/setupDb.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@azure/cognitiveservices-computervision": "^8.2.0",
     "@azure/cosmos": "^4.9.0",
     "@azure/identity": "^4.13.0",
     "@azure/monitor-query": "^1.3.3",
-    "@azure/ms-rest-js": "^2.7.0",
+    "@azure/storage-blob": "^12.17.0",
+    "@fastify/cors": "^10.0.1",
+    "axios": "^1.13.2",
     "dotenv": "^17.2.3",
-    "fastify": "^5.6.2"
+    "fastify": "^5.6.2",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",

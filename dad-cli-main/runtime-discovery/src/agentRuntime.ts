@@ -1,22 +1,110 @@
-import { Page } from "playwright";
-import { launchBrowser } from "./browser";
-import { discoverActions } from "./discoverActions";
-import { waitForPageStability } from "./waitForStability";
-import { ActionContract, Observation, UIState } from "./types";
+import { Page, Browser, BrowserContext, ViewportSize } from "playwright";
+import { launchBrowser } from "./browser.js";
+import { discoverActions } from "./discoverActions.js";
+import { waitForPageStability } from "./waitForStability.js";
+import { ActionContract, Observation, UIState } from "./types.js";
+import crypto from "crypto";
+import { normalizeIdentifier } from "./identifierUtils.js";
 
 let page: Page | null = null;
+let browser: Browser | null = null;
+let context: BrowserContext | null = null;
+
+// Browser lifecycle management
+export async function initializeBrowser(headless: boolean = true): Promise<void> {
+  if (page && !page.isClosed()) {
+    return; // Already initialized
+  }
+
+  try {
+    const result = await launchBrowser(headless);
+    page = result.page;
+    browser = result.browser;
+    context = result.context;
+
+    // Monitor browser console for easier debugging in Node logs
+    page.on('console', msg => {
+      const type = msg.type();
+      const text = msg.text();
+      if (type === 'error' || type === 'warning') {
+        console.log(`[BROWSER ${type.toUpperCase()}] ${text}`);
+      }
+    });
+
+    page.on('pageerror', err => {
+      console.error(`[BROWSER EXCEPTION] ${err.message}`);
+    });
+
+  } catch (error) {
+    console.error("❌ Failed to initialize browser:", error);
+    throw error;
+  }
+}
+
+export async function closeBrowser(): Promise<void> {
+  try {
+    if (page && !page.isClosed()) {
+      await page.close();
+    }
+    if (context) {
+      await context.close();
+    }
+    if (browser) {
+      await browser.close();
+    }
+  } catch (error) {
+    console.warn("⚠️ Error closing browser:", error);
+  } finally {
+    page = null;
+    context = null;
+    browser = null;
+  }
+}
+
+// Check if browser is still connected
+export function isBrowserConnected(): boolean {
+  return page !== null && !page.isClosed();
+}
+
+export async function takeScreenshot(name: string): Promise<string> {
+  if (!page || page.isClosed()) return "";
+  try {
+    const screenshotPath = `screenshots/${name}_${Date.now()}.png`;
+    await page.screenshot({ path: screenshotPath });
+    return screenshotPath;
+  } catch (err) {
+    console.warn("⚠️ Manual screenshot failed:", err);
+    return "";
+  }
+}
 
 // -------------------------------------
 // Discover UI (Prompt-1)
 // -------------------------------------
 export async function discoverUI(url: string, headless: boolean = true): Promise<UIState> {
   try {
-    if (!page) {
-      page = await launchBrowser(headless);
-      await page.goto(url, { waitUntil: "load", timeout: 30000 });
+    // Check if browser is connected, reinitialize if needed
+    if (!isBrowserConnected()) {
+      console.log("🔄 Browser disconnected or not initialized, starting fresh...");
+      await initializeBrowser(headless);
     }
 
-    await waitForPageStability(page);
+    if (!page) {
+      // Should be handled by initializeBrowser, but just in case
+      throw new Error("Browser initialization failed");
+    }
+
+    // Ensure we're on the correct URL.
+    const currentUrl = page.url();
+    const needsNavigation = currentUrl === "about:blank" ||
+      (!currentUrl.startsWith(url.replace(/\/$/, '')) &&
+        !url.startsWith(currentUrl.replace(/\/$/, '')));
+
+    if (needsNavigation) {
+      console.log(`🌐 Navigating to: ${url}`);
+      await page.goto(url, { waitUntil: "load", timeout: 30000 });
+      await waitForPageStability(page);
+    }
 
     // Check for modals and prioritize them
     const hasModal = await page.evaluate(() => {
@@ -38,8 +126,14 @@ export async function discoverUI(url: string, headless: boolean = true): Promise
       console.log(`🚨 Found ${modalActions.length} modal elements - prioritizing:`, modalActions.map(a => a.id));
     }
 
+    // Generate stable state_id based on URL and available actions
+    const stateSeed = `${new URL(page.url()).pathname}:${prioritizedActions.map(a => a.id).sort().join(',')}`;
+    const stableId = crypto.createHash('sha256').update(stateSeed).digest('hex').substring(0, 12);
+
+    console.log(`🧠 Generated Stable State ID: ${stableId} (Actions: ${prioritizedActions.length})`);
+
     return {
-      state_id: crypto.randomUUID(),
+      state_id: stableId,
       route: new URL(page.url()).pathname,
       title: await page.title(),
       available_actions: prioritizedActions.map(a => a.id),
@@ -48,7 +142,7 @@ export async function discoverUI(url: string, headless: boolean = true): Promise
   } catch (error) {
     console.error("❌ UI discovery failed:", error instanceof Error ? error.message : String(error));
     return {
-      state_id: crypto.randomUUID(),
+      state_id: crypto.createHash('sha256').update(`error:${new URL(page?.url() || "http://unknown").pathname}`).digest('hex').substring(0, 12),
       route: "/error",
       title: "Error",
       available_actions: [],
@@ -56,6 +150,7 @@ export async function discoverUI(url: string, headless: boolean = true): Promise
     };
   }
 }
+
 
 // -------------------------------------
 // Execute Action (SINGLE SOURCE OF TRUTH)
@@ -146,7 +241,7 @@ export async function executeAction(
               // Normalize tag name to match discovery phase: 'a' -> 'link', 'button' -> 'button'
               const normalizedTag = tagName === 'a' ? 'link' : tagName;
               identifier = `${normalizedTag}_${finalText.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-              console.log(`[DEBUG] Element: tag=${tagName}, text="${text}", aria="${ariaLabel}", title="${title}", identifier="${identifier}"`);
+              // console.log(`[DEBUG] Element: tag=${tagName}, text="${text}", aria="${ariaLabel}", title="${title}", identifier="${identifier}"`);
             }
 
             if (action.action_id === identifier) {
@@ -272,7 +367,8 @@ export async function executeAction(
 
     let screenshotPath = "";
     try {
-      screenshotPath = `screenshots/${action.action_id}_${Date.now()}.png`;
+      const safeId = (action?.action_id || "unknown").replace(/[^a-z0-9_-]/gi, "_");
+      screenshotPath = `screenshots/${safeId}_${Date.now()}.png`;
       await page.screenshot({ path: screenshotPath });
     } catch (error) {
       console.warn("⚠️ Screenshot failed:", error instanceof Error ? error.message : String(error));

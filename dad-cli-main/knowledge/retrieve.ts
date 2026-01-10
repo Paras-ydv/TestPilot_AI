@@ -1,6 +1,6 @@
-import { qdrant, COLLECTION } from "./client.ts";
-import type { KnowledgeItem } from "./schema.ts";
-import { embedText } from "./embeddings/index.ts";
+import { qdrant, COLLECTION } from "./client.js";
+import type { KnowledgeItem } from "./schema.js";
+import { embedText } from "./embeddings/index.js";
 
 interface SearchOptions {
   type?: KnowledgeItem["type"];
@@ -60,30 +60,35 @@ export async function searchKnowledge(
     };
   }
 
-  const res = await qdrant.search(COLLECTION, searchParams);
+  try {
+    const res = await qdrant.search(COLLECTION, searchParams);
 
-  return res
-    .map((r) => {
-      const payload = r.payload as unknown;
+    return res
+      .map((r) => {
+        const payload = r.payload as unknown;
 
-      if (!isKnowledgeItem(payload)) {
-        return null;
-      }
+        if (!isKnowledgeItem(payload)) {
+          return null;
+        }
 
-      const item = payload as KnowledgeItem;
+        const item = payload as KnowledgeItem;
 
-      // 🔥 APPLY DECAY
-      if (item.last_used) {
-        item.confidence = decayConfidence(
-          item.confidence ?? 0.5,
-          item.last_used
-        );
-      }
+        // 🔥 APPLY DECAY
+        if (item.last_used) {
+          item.confidence = decayConfidence(
+            item.confidence ?? 0.5,
+            item.last_used
+          );
+        }
 
-      return {
-        ...item,
-        score: r.score
-      };
-    })
-    .filter(Boolean) as KnowledgeItem[];
+        return {
+          ...item,
+          score: r.score
+        };
+      })
+      .filter(Boolean) as KnowledgeItem[];
+  } catch (error) {
+    console.warn("⚠️ Search knowledge failed (is Qdrant running?):", error instanceof Error ? error.message : String(error));
+    return [];
+  }
 }

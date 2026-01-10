@@ -78,6 +78,12 @@ export interface KnowledgeItem {
 
     /** Tags for search */
     tags?: string[];
+
+    /** Action parameters (added for fixes) */
+    parameters?: Record<string, any>;
+
+    /** Allow other arbitrary metadata */
+    [key: string]: any;
   };
 
   /** When this memory was created */

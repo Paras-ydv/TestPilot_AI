@@ -1,5 +1,5 @@
-import { storeKnowledge } from "../../knowledge/store.ts";
-import { updateKnowledgeConfidence } from "../../knowledge/feedback.ts";
+import { storeKnowledge } from "../../knowledge/store.js";
+import { updateKnowledgeConfidence } from "../../knowledge/feedback.js";
 
 export async function learnerNode(state: any) {
   const diag = state.diagnosis;

@@ -1,2 +1,2 @@
 // Re-export from shared types
-export * from "../shared/types.ts";
+export * from "../shared/types.js";

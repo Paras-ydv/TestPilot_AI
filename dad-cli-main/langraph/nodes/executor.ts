@@ -1,4 +1,4 @@
-import { AgentState } from "../types.ts";
+import { AgentState } from "../types.js";
 
 export async function executorNode(state: AgentState): Promise<AgentState> {
   try {

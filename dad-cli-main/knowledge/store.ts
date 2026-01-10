@@ -1,7 +1,7 @@
-import { qdrant, COLLECTION } from "./client.ts";
-import type { KnowledgeItem } from "./schema.ts";
+import { qdrant, COLLECTION } from "./client.js";
+import type { KnowledgeItem } from "./schema.js";
 import { v4 as uuidv4 } from "uuid";
-import { embedText } from "./embeddings/index.ts";
+import { embedText } from "./embeddings/index.js";
 
 /**
  * Normalize text into stable signature
@@ -11,7 +11,7 @@ export function normalizeSignature(text: string) {
     if (!text || typeof text !== 'string') {
       return "unknown_signature";
     }
-    
+
     return text
       .toLowerCase()
       .replace(/\d+/g, "N")
@@ -55,11 +55,11 @@ export async function storeKnowledge(item: KnowledgeItem) {
     if (!item) {
       throw new Error("Invalid item: item is null or undefined");
     }
-    
+
     if (!item.content) {
       throw new Error("Invalid item: content is required");
     }
-    
+
     if (!item.run_id) {
       throw new Error("Invalid item: run_id is required");
     }
@@ -119,7 +119,7 @@ export async function storeKnowledge(item: KnowledgeItem) {
       )}`
     );
   } catch (error) {
-    console.error("❌ Store knowledge failed:", error instanceof Error ? error.message : String(error));
-    throw error; // Re-throw to let caller handle
+    console.warn("⚠️ Store knowledge failed (is Qdrant running?):", error instanceof Error ? error.message : String(error));
+    // Non-blocking: don't re-throw
   }
 }

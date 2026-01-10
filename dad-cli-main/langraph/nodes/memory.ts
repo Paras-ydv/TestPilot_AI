@@ -1,5 +1,5 @@
-import { searchKnowledge } from "../../knowledge/retrieve.ts";
-import type { KnowledgeItem } from "../../knowledge/schema.ts";
+import { searchKnowledge } from "../../knowledge/retrieve.js";
+import type { KnowledgeItem } from "../../knowledge/schema.js";
 
 export async function memoryNode(state: any) {
   const query = state.diagnosis?.error_signature || state.last_error || state.anomalies?.map((a: any) => a.message || a.type).join(" ") || "agent runtime behavior";

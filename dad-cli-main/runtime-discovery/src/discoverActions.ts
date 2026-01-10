@@ -19,7 +19,7 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
       const buttons = document.querySelectorAll('button');
       for (let i = 0; i < buttons.length; i++) {
         const btn = buttons[i];
-        let text = btn.textContent?.trim();
+        let text = btn.textContent ? btn.textContent.trim() : "";
         const ariaLabel = btn.getAttribute('aria-label');
         const title = btn.getAttribute('title');
 
@@ -48,7 +48,7 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
       const links = document.querySelectorAll('a[href]');
       for (let i = 0; i < links.length; i++) {
         const link = links[i];
-        let text = link.textContent?.trim();
+        let text = link.textContent ? link.textContent.trim() : "";
         const ariaLabel = link.getAttribute('aria-label');
         const title = link.getAttribute('title');
 
@@ -77,7 +77,7 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
       for (let i = 0; i < inputs.length; i++) {
         const input = inputs[i] as HTMLInputElement | HTMLTextAreaElement;
         const type = input.type || 'text';
-        const placeholder = input.placeholder || input.name || `input_${i}`;
+        const placeholder = input.placeholder || input.name || ("input_" + i);
         const rect = input.getBoundingClientRect();
         const visible = rect.top >= 0 && rect.left >= 0 &&
           rect.bottom <= window.innerHeight &&
@@ -106,7 +106,7 @@ export async function discoverActions(page: Page): Promise<DiscoveredAction[]> {
       const selects = document.querySelectorAll('select');
       for (let i = 0; i < selects.length; i++) {
         const select = selects[i];
-        const name = select.name || `select_${i}`;
+        const name = select.name || ("select_" + i);
         const options = Array.from(select.options).map(opt => opt.text);
         const rect = select.getBoundingClientRect();
         const visible = rect.top >= 0 && rect.left >= 0 &&

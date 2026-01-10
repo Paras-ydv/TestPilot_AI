@@ -1,22 +1,23 @@
 import fs from "fs";
+import { fileURLToPath } from "url";
 
-import { loadAgentState } from "./loaders/agentStateLoader";
-import { extractGraph } from "./loaders/graphLoader";
-import { extractObservation } from "./loaders/observationLoader";
-import { extractAnomalies } from "./loaders/anomalyLoader";
+import { loadAgentState } from "./loaders/agentStateLoader.js";
+import { extractGraph } from "./loaders/graphLoader.js";
+import { extractObservation } from "./loaders/observationLoader.js";
+import { extractAnomalies } from "./loaders/anomalyLoader.js";
 
-import { runContentSafetyOnScreenshots } from "./enrichers/azureVisionSafety";
-import { analyzePerformance } from "./enrichers/azureMonitorPerf";
-import { persistArtifacts } from "./enrichers/storageWriter";
+import { runContentSafetyOnScreenshots } from "./enrichers/azureVisionSafety.js";
+import { analyzePerformance } from "./enrichers/azureMonitorPerf.js";
+import { persistArtifacts } from "./enrichers/storageWriter.js";
 
-import { loadObservationRun } from "./loaders/observationRunLoader";
-import { assembleRunTrace } from "./loaders/traceAssembler";
+import { loadObservationRun } from "./loaders/observationRunLoader.js";
+import { assembleRunTrace } from "./loaders/traceAssembler.js";
 
-import { bindAnomalyEvidence } from "./enrichers/evidenceBinder";
+import { bindAnomalyEvidence } from "./enrichers/evidenceBinder.js";
 
-import { renderCliSummary } from "./renderers/cliReporter";
-import { renderActionTimeline } from "./renderers/timelineRenderer";
-import { writeJsonReport } from "./renderers/jsonReporter";
+import { renderCliSummary } from "./renderers/cliReporter.js";
+import { renderActionTimeline } from "./renderers/timelineRenderer.js";
+import { writeJsonReport } from "./renderers/jsonReporter.js";
 
 
 //
@@ -68,7 +69,10 @@ export async function runPrompt4Pipeline(
 // -------------------------------------------
 //
 
-if (require.main === module) {
+// ESM-compatible main module check
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
   const [, , inputPath, outPath] = process.argv;
 
   if (!inputPath || !outPath) {

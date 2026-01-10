@@ -1,5 +1,5 @@
-import { embedLocal } from "./local.ts";
-import { embedAzure } from "./azure.ts";
+import { embedLocal } from "./local.js";
+import { embedAzure } from "./azure.js";
 
 export async function embedText(text: string): Promise<number[]> {
   const provider = process.env.EMBEDDING_PROVIDER || "local";

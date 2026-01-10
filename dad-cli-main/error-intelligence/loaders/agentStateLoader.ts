@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { AgentState } from "../types";
+import { AgentState } from "../types.js";
 
 export function loadAgentState(agentStatePath: string): AgentState {
   const fullPath = path.resolve(agentStatePath);

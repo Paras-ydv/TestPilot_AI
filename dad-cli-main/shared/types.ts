@@ -10,6 +10,7 @@ export interface DecisionOutput {
   next_action: ActionContract | null;
   control: ControlSignal;
   confidence?: number;
+  reasoning?: string;
   anomalies?: AnomalyReport[];
 }
 
@@ -25,6 +26,7 @@ export type NetworkCall = {
   method: string;
   url: string;
   status: number;
+  failed?: boolean;
 };
 
 export type Observation = {
@@ -33,6 +35,7 @@ export type Observation = {
   consoleErrors: string[];
   screenshotPath?: string;
   skipped?: boolean;
+  selector?: string;
   state_delta?: Record<string, any>;
 };
 
@@ -40,14 +43,19 @@ export type UIState = {
   state_id: string;
   route: string;
   title: string;
-  available_actions: string[];
+  available_actions: any[];
   entities: Record<string, any>;
+  viewport?: {
+    width: number;
+    height: number;
+  };
 };
 
 export type AgentStep = {
   step: number;
   action: ActionContract;
   observation: Observation;
+  state_id?: string; // Captures the resulting state ID
   anomalies?: AnomalyReport[];
 };
 
@@ -55,6 +63,9 @@ export type AgentStep = {
 export interface AgentState {
   schema_version: string;
   run_id: string;
+
+  // Screenshot URL for the current state (used by graph tracker)
+  screenshot_url?: string;
 
   runtime: {
     url: string;
@@ -89,4 +100,5 @@ export interface AgentState {
     reason?: string;
   };
   validation?: any;
+  reasoning?: string;
 }

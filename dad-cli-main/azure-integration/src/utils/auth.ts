@@ -12,9 +12,15 @@ export async function apiKeyAuth(
     });
   }
 
+  if (!process.env.API_KEY) {
+    return reply.code(403).send({
+      error: "Authentication failed"
+    });
+  }
+
   if (apiKey !== process.env.API_KEY) {
     return reply.code(403).send({
-      error: "Invalid API key"
+      error: "Authentication failed"
     });
   }
 }

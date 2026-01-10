@@ -1,13 +1,13 @@
-import { AgentState } from "../types.ts";
+import { AgentState } from "../types.js";
 import {
   checkApiUiInvariant
-} from "../invariants/apiUiInvariant.ts";
+} from "../invariants/apiUiInvariant.js";
 import {
   checkRouteInvariant
-} from "../invariants/routeInvariant.ts";
+} from "../invariants/routeInvariant.js";
 import {
   checkConsoleErrors
-} from "../invariants/consoleErrorInvariant.ts";
+} from "../invariants/consoleErrorInvariant.js";
 
 export function anomalyDetector(state: AgentState): AgentState {
   const anomalies = [];

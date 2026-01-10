@@ -1,17 +1,28 @@
 import { LogsQueryClient } from "@azure/monitor-query";
 import { ClientSecretCredential } from "@azure/identity";
-import { azureConfig } from "../config/azure";
+import { azureConfig } from "../config/azure.js";
 
-const credential = new ClientSecretCredential(
-  azureConfig.tenantId,
-  azureConfig.clientId,
-  azureConfig.clientSecret
-);
+function createCredential() {
+  if (!azureConfig.tenantId || !azureConfig.clientId || !azureConfig.clientSecret) {
+    throw new Error("Azure Monitor configuration missing: tenantId, clientId, or clientSecret");
+  }
+  return new ClientSecretCredential(
+    azureConfig.tenantId,
+    azureConfig.clientId,
+    azureConfig.clientSecret
+  );
+}
 
-const client = new LogsQueryClient(credential);
+function createClient() {
+  if (!azureConfig.monitor.workspaceId) {
+    throw new Error("Azure Monitor workspaceId missing");
+  }
+  return new LogsQueryClient(createCredential());
+}
 
 export async function queryLogs(kustoQuery: string) {
   try {
+    const client = createClient();
     const result: any = await client.queryWorkspace(
       azureConfig.monitor.workspaceId,
       kustoQuery,

@@ -1,10 +1,14 @@
 import { graphStorage } from "../storage/graph-storage.js";
 
 export class GraphTracker {
+  private currentRunId: string | null;
+  private lastNodeId: string | null;
+
   constructor() {
     this.currentRunId = null;
     this.lastNodeId = null;
   }
+
 
   startRun() {
     this.currentRunId = graphStorage.createRun();

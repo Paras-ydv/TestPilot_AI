@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
-import { queryLogs } from "../services/azureMonitor.service";
-import { apiKeyAuth } from "../utils/auth";
+import { queryLogs } from "../services/azureMonitor.service.js";
+import { apiKeyAuth } from "../utils/auth.js";
 
 export async function monitorRoutes(app: FastifyInstance) {
 

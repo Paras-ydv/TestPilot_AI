@@ -1,5 +1,5 @@
-import { buildPrompt3Graph } from "./graph.ts";
-import { AgentState } from "./types.ts";
+import { buildPrompt3Graph } from "./graph.js";
+import { AgentState } from "./types.js";
 
 const graph = buildPrompt3Graph();
 
@@ -8,13 +8,13 @@ export async function runPrompt3(state: AgentState): Promise<AgentState> {
     if (!state) {
       throw new Error("Invalid state: state is null or undefined");
     }
-    
+
     const result = await graph.invoke(state);
-    
+
     if (!result) {
       throw new Error("LangGraph returned null result");
     }
-    
+
     return result;
   } catch (error) {
     console.error("❌ LangGraph execution failed:", error instanceof Error ? error.message : String(error));
