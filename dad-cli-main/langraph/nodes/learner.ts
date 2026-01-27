@@ -8,11 +8,31 @@ export async function learnerNode(state: any) {
   const decision = state.decision;
   const knowledge = state.knowledge_context;
 
+  // Store exploration knowledge even without errors
+  if (decision?.next_action && val?.success) {
+    await storeKnowledge({
+      type: "exploration",
+      content: `Successfully executed ${decision.next_action.action_id}`,
+      run_id: state.run_id,
+      error_signature: `${decision.next_action.action_id}_success`,
+      solution: decision.next_action.action_id,
+      outcome: "success",
+      success_count: 1,
+      failure_count: 0,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        url: state.current_url,
+        parameters: decision.next_action.parameters,
+        tags: ["exploration", "success"]
+      }
+    });
+  }
+
   if (!diag || !exec || !val) {
     return state;
   }
 
-  console.log("📚 Enhanced learning from result");
+  console.log("📚 Learning from result");
 
   // Update existing knowledge confidence
   if (knowledge?.memories?.length && decision?.source === "knowledge_base") {

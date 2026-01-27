@@ -1,7 +1,7 @@
 import { URL } from "url";
 
 const BLOCKED_HOSTS = [
-  "localhost", "127.0.0.1", "0.0.0.0", "::1",
+  // "localhost", "127.0.0.1", "0.0.0.0", "::1", // Allow localhost for development
   "169.254.169.254", // AWS metadata
   "metadata.google.internal" // GCP metadata
 ];
